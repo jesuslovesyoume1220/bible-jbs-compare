@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>聖書協会共同訳 対照</title>
+
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#16213e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="聖書対照">
+<link rel="apple-touch-icon" href="/static/icons/icon.svg">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  body {
+    font-family: "Yu Gothic", "游ゴシック", "Hiragino Kaku Gothic ProN", sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e8;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── ヘッダー ── */
+  header {
+    background: #16213e;
+    border-bottom: 2px solid #0f3460;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; font-weight: 600; color: #7eb8f7; white-space: nowrap; }
+
+  .status-bar { font-size: 12px; color: #5d8aa8; margin-left: 2px; }
+  .status-bar.ok { color: #4caf50; }
+  .status-bar.ng { color: #f44336; }
+
+  button {
+    background: #1a5276; color: #fff; border: none; border-radius: 6px;
+    padding: 7px 14px; font-size: 14px; font-family: inherit;
+    cursor: pointer; transition: background 0.15s; white-space: nowrap;
+  }
+  button:hover { background: #2874a6; }
+
+  .btn-login-header {
+    margin-left: auto;
+    background: transparent; color: #7eb8f7;
+    border: 1px solid #1a5276; padding: 5px 12px; font-size: 13px;
+  }
+  .btn-login-header:hover { background: #0f3460; }
+
+  /* ── パネル ── */
+  .panels { display: flex; flex: 1; overflow: hidden; gap: 2px; background: #0f3460; }
+
+  .panel-wrapper {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+  }
+
+  .panel-header {
+    background: #16213e; padding: 6px 10px;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid #0f3460; flex-shrink: 0; flex-wrap: wrap;
+  }
+
+  select {
+    background: #0f3460; color: #e0e0e8;
+    border: 1px solid #1a5276; border-radius: 6px;
+    padding: 5px 8px; font-size: 13px; font-family: inherit; cursor: pointer; outline: none;
+  }
+  select:hover { border-color: #7eb8f7; }
+
+  .btn-nav {
+    background: #0f3460; color: #e0e0e8; padding: 5px 10px;
+    font-size: 16px; border: 1px solid #1a5276; border-radius: 6px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .btn-nav:hover { background: #1a5276; }
+
+  .btn-play {
+    background: #0f3460; color: #7eb8f7;
+    border: 1px solid #1a5276; border-radius: 5px;
+    padding: 4px 10px; font-size: 13px; cursor: pointer;
+    transition: background 0.15s; white-space: nowrap; flex-shrink: 0;
+    margin-left: auto;
+  }
+  .btn-play:hover { background: #1a5276; }
+  .btn-play.playing { background: #4a1515; color: #ff8888; border-color: #8b3333; }
+  .btn-play.playing:hover { background: #5c1a1a; }
+
+  /* ── 本文 ── */
+  .panel-body {
+    flex: 1; overflow-y: auto;
+    background: #ffffff; color: #1a1a1a;
+    padding: 18px 22px 36px; line-height: 2.0; font-size: 15px;
+  }
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-track { background: #f0f0f0; }
+  .panel-body::-webkit-scrollbar-thumb { background: #c0c0c0; border-radius: 3px; }
+  .panel-body::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
+
+  /* ── テキスト ── */
+  .chapter-title {
+    font-size: 17px; font-weight: 700; color: #1a3a6e;
+    margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 2px solid #d0dce8;
+  }
+  .ver-badge {
+    display: inline-block; font-size: 11px; font-weight: 400;
+    color: #7eb8f7; background: #1a3a6e; border-radius: 4px;
+    padding: 1px 6px; margin-left: 8px; vertical-align: middle;
+  }
+  .verse-para { margin-bottom: 8px; text-indent: 1em; line-height: 1.9; }
+  .verse-num {
+    font-size: 10px; font-weight: 700; color: #bbb;
+    vertical-align: super; margin: 0 2px; line-height: 1;
+  }
+  .section-heading {
+    font-size: 13px; font-weight: 700; color: #1a5276;
+    margin: 14px 0 6px; padding-left: 8px; border-left: 3px solid #7eb8f7;
+  }
+
+  .loading { text-align: center; padding: 40px; color: #888888; font-size: 14px; }
+
+  .need-login {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%; gap: 14px; padding: 30px; text-align: center;
+  }
+  .need-login h3 { color: #1a5276; font-size: 16px; }
+  .need-login p { color: #555555; font-size: 13px; line-height: 1.7; }
+  .need-login button { background: #1a5276; padding: 10px 28px; font-size: 15px; }
+
+  /* ── ログインオーバーレイ ── */
+  .overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .overlay.open { display: flex; }
+
+  .login-panel {
+    background: #16213e; border: 1px solid #1a5276; border-radius: 12px;
+    padding: 28px 32px; width: min(420px, 90vw);
+  }
+  .login-panel h2 { color: #7eb8f7; font-size: 17px; margin-bottom: 20px; }
+
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 12px; color: #8aabca; margin-bottom: 5px; }
+  .form-group input {
+    width: 100%; background: #0f3460; color: #e0e0e8;
+    border: 1px solid #1a5276; border-radius: 6px;
+    padding: 9px 12px; font-size: 14px; font-family: inherit; outline: none;
+  }
+  .form-group input:focus { border-color: #7eb8f7; }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+  .btn-cancel { background: #0f3460; }
+
+  .login-error {
+    background: #2c1a1a; border: 1px solid #5c2a2a; border-radius: 6px;
+    padding: 10px 14px; margin-top: 12px; font-size: 13px; color: #e07070; display: none;
+  }
+  .login-success {
+    background: #1a2c1a; border: 1px solid #2a5c2a; border-radius: 6px;
+    padding: 10px 14px; margin-top: 12px; font-size: 13px; color: #70e070; display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✝ 聖書協会共同訳 対照</h1>
+  <span id="statusBar" class="status-bar">確認中…</span>
+  <button class="btn-login-header" id="btnLoginHeader" onclick="openLogin()">🔑 ログイン</button>
+</header>
+
+<div class="panels">
+
+  <!-- 左パネル -->
+  <div class="panel-wrapper">
+    <div class="panel-header">
+      <select id="bookSelL" onchange="onBookChangeL()">
+        {% for b in books %}
+        <option value="{{ b.id }}" {% if b.id == 'MAT' %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+      <select id="chapSelL" onchange="loadLeft()"></select>
+      <button class="btn-nav" onclick="navL(-1)">◀</button>
+      <button class="btn-nav" onclick="navL(1)">▶</button>
+      <button class="btn-play" id="btnPlayL" onclick="togglePlay('L')">▶ 読む</button>
+    </div>
+    <div class="panel-body" id="panelL">
+      <div class="loading">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- 右パネル -->
+  <div class="panel-wrapper">
+    <div class="panel-header">
+      <select id="bookSelR" onchange="onBookChangeR()">
+        {% for b in books %}
+        <option value="{{ b.id }}" {% if b.id == 'MAT' %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+      <select id="chapSelR" onchange="loadRight()"></select>
+      <button class="btn-nav" onclick="navR(-1)">◀</button>
+      <button class="btn-nav" onclick="navR(1)">▶</button>
+      <button class="btn-play" id="btnPlayR" onclick="togglePlay('R')">▶ 読む</button>
+    </div>
+    <div class="panel-body" id="panelR">
+      <div class="loading">読み込み中…</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ログインオーバーレイ -->
+<div class="overlay" id="overlay" onclick="closeBgClick(event)">
+  <div class="login-panel">
+    <h2>🔑 聖書協会共同訳 ログイン</h2>
+    <div class="form-group">
+      <label>メールアドレス</label>
+      <input type="email" id="loginEmail" placeholder="example@gmail.com" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>パスワード</label>
+      <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') doLogin()">
+    </div>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-success" id="loginSuccess">ログインしました！</div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeLogin()">キャンセル</button>
+      <button id="btnDoLogin" onclick="doLogin()">ログイン</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BOOKS = {{ books | tojson }};
+const BOOK_MAP = {};
+BOOKS.forEach(b => BOOK_MAP[b.id] = b);
+
+let isLoggedIn = false;
+let ttsPlaying = null; // 'L' | 'R' | null
+
+// ── 章セレクト構築 ──
+function buildChapterSelect(selId, bookId, ch = 1) {
+  const sel = document.getElementById(selId);
+  const book = BOOK_MAP[bookId];
+  sel.innerHTML = '';
+  for (let i = 1; i <= book.chapters; i++) {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = `${i}章`;
+    if (i === ch) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function onBookChangeL() {
+  const book = document.getElementById('bookSelL').value;
+  buildChapterSelect('chapSelL', book, 1);
+  loadLeft();
+}
+
+function onBookChangeR() {
+  const book = document.getElementById('bookSelR').value;
+  buildChapterSelect('chapSelR', book, 1);
+  loadRight();
+}
+
+// ── 前後移動 ──
+function navL(dir) {
+  const bookId = document.getElementById('bookSelL').value;
+  const book = BOOK_MAP[bookId];
+  const chapSel = document.getElementById('chapSelL');
+  let ch = parseInt(chapSel.value) + dir;
+  ch = Math.max(1, Math.min(ch, book.chapters));
+  chapSel.value = ch;
+  loadLeft();
+}
+
+function navR(dir) {
+  const bookId = document.getElementById('bookSelR').value;
+  const book = BOOK_MAP[bookId];
+  const chapSel = document.getElementById('chapSelR');
+  let ch = parseInt(chapSel.value) + dir;
+  ch = Math.max(1, Math.min(ch, book.chapters));
+  chapSel.value = ch;
+  loadRight();
+}
+
+// ── データ読み込み ──
+async function loadLeft() {
+  stopTTS();
+  const book    = document.getElementById('bookSelL').value;
+  const chapter = document.getElementById('chapSelL').value;
+  document.getElementById('panelL').innerHTML = '<div class="loading">読み込み中…</div>';
+  const data = await fetchChapter(book, chapter);
+  renderPanel('panelL', data);
+  document.getElementById('panelL').scrollTop = 0;
+}
+
+async function loadRight() {
+  stopTTS();
+  const book    = document.getElementById('bookSelR').value;
+  const chapter = document.getElementById('chapSelR').value;
+  document.getElementById('panelR').innerHTML = '<div class="loading">読み込み中…</div>';
+  const data = await fetchChapter(book, chapter);
+  renderPanel('panelR', data);
+  document.getElementById('panelR').scrollTop = 0;
+}
+
+async function fetchChapter(book, chapter) {
+  try {
+    const res = await fetch(`/api/chapter?book=${book}&chapter=${chapter}`);
+    return await res.json();
+  } catch(e) {
+    return { error: e.message, items: [], count: 0 };
+  }
+}
+
+// ── 描画 ──
+function renderPanel(panelId, data) {
+  const panel = document.getElementById(panelId);
+
+  if (data.error === 'not_logged_in') {
+    panel.innerHTML = `
+      <div class="need-login">
+        <h3>🔑 ログインが必要です</h3>
+        <p>右上の「ログイン」ボタンから<br>jbsbibleapp.com のアカウントでログインしてください</p>
+        <button onclick="openLogin()">ログインする</button>
+      </div>`;
+    return;
+  }
+
+  if (data.error) {
+    panel.innerHTML = `<div class="loading" style="color:#cc4444">エラー: ${esc(data.error)}</div>`;
+    return;
+  }
+
+  if (!data.items || data.items.length === 0) {
+    panel.innerHTML = `<div class="loading">テキストが見つかりませんでした</div>`;
+    return;
+  }
+
+  let html = `<div class="chapter-title">${esc(data.title || '')}<span class="ver-badge">聖書協会共同訳</span></div>`;
+
+  let lastShownNum = -1;
+  data.items.forEach(item => {
+    if (item.type === 'heading') {
+      html += `<div class="section-heading">${esc(item.text)}</div>`;
+    } else if (item.type === 'para' && item.lines) {
+      item.lines.forEach(line => {
+        let lineHtml = '';
+        if (line.parts && line.parts.length > 0) {
+          line.parts.forEach(part => {
+            const num = part[0], text = part[1];
+            if (num !== lastShownNum) {
+              lineHtml += `<sup class="verse-num">${num}</sup>`;
+              lastShownNum = num;
+            }
+            lineHtml += esc(text) + ' ';
+          });
+        } else {
+          if (line.num !== lastShownNum) {
+            lineHtml = `<sup class="verse-num">${line.num}</sup>`;
+            lastShownNum = line.num;
+          }
+          lineHtml += esc(line.text || '');
+        }
+        html += `<p class="verse-para">${lineHtml.trim()}</p>`;
+      });
+    } else if (item.type === 'verse') {
+      html += `<p class="verse-para"><sup class="verse-num">${item.num}</sup>${esc(item.text)}</p>`;
+    }
+  });
+
+  panel.innerHTML = html;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 音声読み上げ ──
+function getReadText(panelId) {
+  const panel = document.getElementById(panelId);
+  let text = '';
+  const title = panel.querySelector('.chapter-title');
+  if (title) text = title.textContent.replace('聖書協会共同訳', '') + '。';
+  panel.querySelectorAll('.verse-para').forEach(p => {
+    let t = '';
+    p.childNodes.forEach(node => {
+      if (node.tagName === 'SUP') return;
+      t += node.textContent;
+    });
+    if (t.trim()) text += t.trim() + '。';
+  });
+  return text.trim();
+}
+
+function togglePlay(side) {
+  const panelId = side === 'L' ? 'panelL' : 'panelR';
+  const btnId   = side === 'L' ? 'btnPlayL' : 'btnPlayR';
+  const btn     = document.getElementById(btnId);
+
+  if (ttsPlaying === side) { stopTTS(); return; }
+
+  stopTTS();
+
+  const text = getReadText(panelId);
+  if (!text || text.length < 5) return;
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'ja-JP';
+  utter.rate = 0.95;
+  utter.pitch = 1.0;
+
+  const voices = window.speechSynthesis.getVoices();
+  const jaVoice = voices.find(v => v.lang.startsWith('ja'));
+  if (jaVoice) utter.voice = jaVoice;
+
+  utter.onend = () => { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); ttsPlaying = null; };
+  utter.onerror = () => { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); ttsPlaying = null; };
+
+  ttsPlaying = side;
+  btn.textContent = '■ 停止';
+  btn.classList.add('playing');
+  window.speechSynthesis.speak(utter);
+}
+
+function stopTTS() {
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    window.speechSynthesis.cancel();
+  }
+  if (ttsPlaying) {
+    const btnId = ttsPlaying === 'L' ? 'btnPlayL' : 'btnPlayR';
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); }
+  }
+  ttsPlaying = null;
+}
+
+// ── 初期化 ──
+window.onload = async () => {
+  buildChapterSelect('chapSelL', 'MAT', 1);
+  buildChapterSelect('chapSelR', 'MAT', 2); // 右は2章から
+  await checkStatus();
+  loadLeft();
+  loadRight();
+};
+
+async function checkStatus() {
+  const res = await fetch('/api/status');
+  const data = await res.json();
+  isLoggedIn = data.logged_in;
+  updateStatusBar(data);
+}
+
+function updateStatusBar(data) {
+  const bar = document.getElementById('statusBar');
+  const btn = document.getElementById('btnLoginHeader');
+  if (data.logged_in) {
+    bar.textContent = `✓ ${data.email}`;
+    bar.className = 'status-bar ok';
+    btn.textContent = '🔓 ログアウト';
+    btn.onclick = doLogout;
+  } else {
+    bar.textContent = '未ログイン';
+    bar.className = 'status-bar ng';
+    btn.textContent = '🔑 ログイン';
+    btn.onclick = openLogin;
+  }
+}
+
+// ── ログイン ──
+function openLogin() {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginSuccess').style.display = 'none';
+  document.getElementById('loginPassword').value = '';
+  setTimeout(() => document.getElementById('loginPassword').focus(), 100);
+}
+
+function closeLogin() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+function closeBgClick(e) {
+  if (e.target === document.getElementById('overlay')) closeLogin();
+}
+
+async function doLogin() {
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errDiv   = document.getElementById('loginError');
+  const okDiv    = document.getElementById('loginSuccess');
+  const btn      = document.getElementById('btnDoLogin');
+
+  errDiv.style.display = 'none';
+  okDiv.style.display  = 'none';
+
+  if (!email || !password) {
+    errDiv.textContent = 'メールアドレスとパスワードを入力してください';
+    errDiv.style.display = 'block'; return;
+  }
+
+  btn.textContent = 'ログイン中…'; btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      okDiv.style.display = 'block';
+      isLoggedIn = true;
+      updateStatusBar({ logged_in: true, email });
+      setTimeout(() => {
+        closeLogin();
+        loadLeft();
+        loadRight();
+      }, 800);
+    } else {
+      errDiv.textContent = data.message || 'ログインに失敗しました';
+      errDiv.style.display = 'block';
+    }
+  } catch(e) {
+    errDiv.textContent = 'エラー: ' + e.message;
+    errDiv.style.display = 'block';
+  }
+
+  btn.textContent = 'ログイン'; btn.disabled = false;
+}
+
+async function doLogout() {
+  stopTTS();
+  await fetch('/api/logout', { method: 'POST' });
+  isLoggedIn = false;
+  updateStatusBar({ logged_in: false, email: '' });
+  const msg = `<div class="need-login">
+    <h3>🔑 ログインが必要です</h3>
+    <p>右上の「ログイン」ボタンからログインしてください</p>
+    <button onclick="openLogin()">ログインする</button>
+  </div>`;
+  document.getElementById('panelL').innerHTML = msg;
+  document.getElementById('panelR').innerHTML = msg;
+}
+</script>
+</body>
+</html>
