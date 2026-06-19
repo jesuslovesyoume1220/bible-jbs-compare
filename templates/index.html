@@ -380,7 +380,7 @@ function renderPanel(panelId, data) {
     return;
   }
 
-  let html = `<div class="chapter-title">${esc(data.title || '')}<span class="ver-badge">聖書協会共同訳</span></div>`;
+  let html = `<div class="chapter-title">${esc(data.title || '')}</div>`;
 
   let lastShownNum = -1;
   data.items.forEach(item => {
