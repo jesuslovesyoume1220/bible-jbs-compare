@@ -457,7 +457,7 @@ function stopTTS() {
 // ── 初期化 ──
 window.onload = async () => {
   buildChapterSelect('chapSelL', 'MAT', 1);
-  buildChapterSelect('chapSelR', 'MAT', 2); // 右は2章から
+  buildChapterSelect('chapSelR', 'MAT', 1);
   await checkStatus();
   loadLeft();
   loadRight();
