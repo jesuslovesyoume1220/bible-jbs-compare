@@ -184,6 +184,7 @@
   <h1>✝ 聖書協会共同訳 対照</h1>
   <span id="statusBar" class="status-bar">確認中…</span>
   <button class="btn-login-header" id="btnLoginHeader" onclick="openLogin()">🔑 ログイン</button>
+  <button class="btn-login-header" id="btnLogout" onclick="doLogout()" style="display:none;color:#f07070;border-color:#5c2a2a;">ログアウト</button>
 </header>
 
 <div class="panels">
@@ -229,7 +230,7 @@
 <!-- ログインオーバーレイ -->
 <div class="overlay" id="overlay" onclick="closeBgClick(event)">
   <div class="login-panel">
-    <h2>🔑 聖書協会共同訳 ログイン</h2>
+    <h2 id="loginTitle">🔑 聖書協会共同訳 ログイン</h2>
     <div class="form-group">
       <label>メールアドレス</label>
       <input type="email" id="loginEmail" placeholder="example@gmail.com" autocomplete="username">
@@ -238,6 +239,12 @@
       <label>パスワード</label>
       <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password"
              onkeydown="if(event.key==='Enter') doLogin()">
+    </div>
+    <div style="margin-top:8px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#8aabca;cursor:pointer;">
+        <input type="checkbox" id="rememberMe" checked style="width:16px;height:16px;cursor:pointer;">
+        次回から自動ログイン
+      </label>
     </div>
     <div class="login-error" id="loginError"></div>
     <div class="login-success" id="loginSuccess">ログインしました！</div>
@@ -454,6 +461,24 @@ function stopTTS() {
   ttsPlaying = null;
 }
 
+// ── localStorage ──
+function saveCredentials(email, password) {
+  localStorage.setItem('jbs_email', email);
+  localStorage.setItem('jbs_password', password);
+}
+
+function loadCredentials() {
+  return {
+    email:    localStorage.getItem('jbs_email') || '',
+    password: localStorage.getItem('jbs_password') || '',
+  };
+}
+
+function clearCredentials() {
+  localStorage.removeItem('jbs_email');
+  localStorage.removeItem('jbs_password');
+}
+
 // ── 初期化 ──
 window.onload = async () => {
   buildChapterSelect('chapSelL', 'MAT', 1);
@@ -466,32 +491,83 @@ window.onload = async () => {
 async function checkStatus() {
   const res = await fetch('/api/status');
   const data = await res.json();
+
+  // サーバーが未ログインならlocalStorageの認証情報で自動ログイン
+  if (!data.logged_in) {
+    const creds = loadCredentials();
+    if (creds.email && creds.password) {
+      const ok = await autoLoginWithCredentials(creds.email, creds.password);
+      if (ok) return;
+    }
+  }
+
   isLoggedIn = data.logged_in;
   updateStatusBar(data);
 }
 
+async function autoLoginWithCredentials(email, password) {
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      isLoggedIn = true;
+      updateStatusBar({ logged_in: true, email });
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
 function updateStatusBar(data) {
-  const bar = document.getElementById('statusBar');
-  const btn = document.getElementById('btnLoginHeader');
+  const bar     = document.getElementById('statusBar');
+  const btn     = document.getElementById('btnLoginHeader');
+  const btnOut  = document.getElementById('btnLogout');
   if (data.logged_in) {
     bar.textContent = `✓ ${data.email}`;
     bar.className = 'status-bar ok';
-    btn.textContent = '🔓 ログアウト';
-    btn.onclick = doLogout;
+    btn.textContent = '🔑 IDを変更';
+    btn.onclick = openChangeLogin;
+    btnOut.style.display = '';
   } else {
     bar.textContent = '未ログイン';
     bar.className = 'status-bar ng';
     btn.textContent = '🔑 ログイン';
     btn.onclick = openLogin;
+    btnOut.style.display = 'none';
   }
 }
 
 // ── ログイン ──
 function openLogin() {
-  document.getElementById('overlay').classList.add('open');
+  document.getElementById('loginTitle').textContent = '🔑 聖書協会共同訳 ログイン';
   document.getElementById('loginError').style.display = 'none';
   document.getElementById('loginSuccess').style.display = 'none';
+  // localStorageの保存済み認証情報を事前入力
+  const creds = loadCredentials();
+  document.getElementById('loginEmail').value = creds.email;
+  document.getElementById('loginPassword').value = creds.password;
+  document.getElementById('rememberMe').checked = true;
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(() => {
+    const pwField = document.getElementById('loginPassword');
+    pwField.focus();
+    if (!creds.password) document.getElementById('loginEmail').focus();
+  }, 100);
+}
+
+function openChangeLogin() {
+  document.getElementById('loginTitle').textContent = '🔑 ログインIDを変更';
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginSuccess').style.display = 'none';
+  const creds = loadCredentials();
+  document.getElementById('loginEmail').value = creds.email;
   document.getElementById('loginPassword').value = '';
+  document.getElementById('rememberMe').checked = true;
+  document.getElementById('overlay').classList.add('open');
   setTimeout(() => document.getElementById('loginPassword').focus(), 100);
 }
 
@@ -506,6 +582,7 @@ function closeBgClick(e) {
 async function doLogin() {
   const email    = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
+  const remember = document.getElementById('rememberMe').checked;
   const errDiv   = document.getElementById('loginError');
   const okDiv    = document.getElementById('loginSuccess');
   const btn      = document.getElementById('btnDoLogin');
@@ -528,6 +605,12 @@ async function doLogin() {
     });
     const data = await res.json();
     if (data.ok) {
+      // 「次回から自動ログイン」が有効なら保存
+      if (remember) {
+        saveCredentials(email, password);
+      } else {
+        clearCredentials();
+      }
       okDiv.style.display = 'block';
       isLoggedIn = true;
       updateStatusBar({ logged_in: true, email });
@@ -550,6 +633,7 @@ async function doLogin() {
 
 async function doLogout() {
   stopTTS();
+  clearCredentials();
   await fetch('/api/logout', { method: 'POST' });
   isLoggedIn = false;
   updateStatusBar({ logged_in: false, email: '' });
