@@ -551,18 +551,15 @@ window.onload = async () => {
 };
 
 async function checkStatus() {
+  // デバイス保存の認証情報を常に優先（デバイスごとに独立）
+  const creds = loadCredentials();
+  if (creds.email && creds.password) {
+    const ok = await autoLoginWithCredentials(creds.email, creds.password);
+    if (ok) return;
+  }
+  // localStorage未設定の場合はサーバー状態を確認
   const res = await fetch('/api/status');
   const data = await res.json();
-
-  // サーバーが未ログインならlocalStorageの認証情報で自動ログイン
-  if (!data.logged_in) {
-    const creds = loadCredentials();
-    if (creds.email && creds.password) {
-      const ok = await autoLoginWithCredentials(creds.email, creds.password);
-      if (ok) return;
-    }
-  }
-
   isLoggedIn = data.logged_in;
   updateStatusBar(data);
 }
