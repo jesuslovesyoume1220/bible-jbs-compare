@@ -478,40 +478,43 @@ function stopTTS() {
   ttsPlaying = null;
 }
 
-// ── CMD+B: 節番号なしコピー ──
+// ── CMD+C（節番号あり） / CMD+B（節番号なし） ──
 document.addEventListener('keydown', async (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
-    e.preventDefault();
+  const isCopy = (e.metaKey || e.ctrlKey) && e.key === 'c';
+  const isNoCopy = (e.metaKey || e.ctrlKey) && e.key === 'b';
+  if (!isCopy && !isNoCopy) return;
 
-    // 選択範囲をクローン
-    const range = selection.getRangeAt(0);
-    const fragment = range.cloneContents();
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return;
 
-    // 節番号（sup.verse-num）を削除
-    fragment.querySelectorAll('sup.verse-num').forEach(el => el.remove());
-    // 見出し左ボーダー用のdivも含め、テキストのみ取得
-    const tmp = document.createElement('div');
-    tmp.appendChild(fragment);
-    let text = tmp.textContent;
-    // 余分な空白を整理
-    text = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  e.preventDefault();
 
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // フォールバック
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-    showCopyToast();
+  const range = selection.getRangeAt(0);
+  const fragment = range.cloneContents();
+  const tmp = document.createElement('div');
+  tmp.appendChild(fragment);
+
+  if (isNoCopy) {
+    // 節番号を削除
+    tmp.querySelectorAll('sup.verse-num').forEach(el => el.remove());
   }
+
+  let text = tmp.textContent;
+  text = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+
+  if (isNoCopy) showCopyToast();
 });
 
 function showCopyToast() {
