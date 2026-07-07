@@ -104,8 +104,20 @@
   .panel-body {
     flex: 1; overflow-y: auto;
     background: #ffffff; color: #1a1a1a;
-    padding: 18px 22px 36px; line-height: 2.0; font-size: 15px;
+    padding: 18px 22px 36px; line-height: 2.0; font-size: var(--body-fs, 15px);
   }
+
+  /* ── 読み上げ中の節ハイライト ── */
+  .tts-active { background: #fff3c4; border-radius: 4px; }
+
+  /* ── 節検索 ── */
+  .ref-search {
+    background: #ffffff; color: #1a1a1a;
+    border: 1px solid #90caf9; border-radius: 6px;
+    padding: 4px 8px; font-size: 13px; font-family: inherit;
+    width: 120px; outline: none;
+  }
+  .ref-search:focus { border-color: #1565c0; }
   .panel-body::-webkit-scrollbar { width: 6px; }
   .panel-body::-webkit-scrollbar-track { background: #f0f0f0; }
   .panel-body::-webkit-scrollbar-thumb { background: #c0c0c0; border-radius: 3px; }
@@ -199,6 +211,10 @@
     <button class="btn-login-header" id="btnLogout" onclick="doLogout()" style="display:none;color:#c62828;border-color:#ef9a9a;">ログアウト</button>
   </div>
   <span style="position:absolute;left:50%;transform:translateX(-50%);font-size:12px;color:#ffffff;white-space:nowrap;pointer-events:none;">節番号なしでコピー　→　CMD+B</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+    <button class="btn-login-header" onclick="adjustFont(-1)" style="font-size:12px;" title="文字を小さく">A−</button>
+    <button class="btn-login-header" onclick="adjustFont(1)" style="font-size:15px;" title="文字を大きく">A＋</button>
+  </div>
 </header>
 
 <div class="panels">
@@ -214,6 +230,8 @@
       <select id="chapSelL" onchange="loadLeft()"></select>
       <button class="btn-nav" onclick="navL(-1)">◀</button>
       <button class="btn-nav" onclick="navL(1)">▶</button>
+      <input class="ref-search" id="refSearchL" placeholder="例: ヨハネ3:16" onkeydown="if(event.key==='Enter') goToRef('L')">
+      <button class="btn-nav" onclick="goToRef('L')" style="font-size:13px;">移動</button>
       <button class="btn-play" id="btnPlayL" onclick="togglePlay('L')">▶ 読む</button>
     </div>
     <div class="panel-body" id="panelL">
@@ -232,6 +250,8 @@
       <select id="chapSelR" onchange="loadRight()"></select>
       <button class="btn-nav" onclick="navR(-1)">◀</button>
       <button class="btn-nav" onclick="navR(1)">▶</button>
+      <input class="ref-search" id="refSearchR" placeholder="例: ヨハネ3:16" onkeydown="if(event.key==='Enter') goToRef('R')">
+      <button class="btn-nav" onclick="goToRef('R')" style="font-size:13px;">移動</button>
       <button class="btn-play" id="btnPlayR" onclick="togglePlay('R')">▶ 読む</button>
     </div>
     <div class="panel-body" id="panelR">
@@ -329,6 +349,7 @@ function navR(dir) {
 // ── データ読み込み ──
 async function loadLeft() {
   stopTTS();
+  savePosition();
   const book    = document.getElementById('bookSelL').value;
   const chapter = document.getElementById('chapSelL').value;
   document.getElementById('panelL').innerHTML = '<div class="loading">読み込み中…</div>';
@@ -339,6 +360,7 @@ async function loadLeft() {
 
 async function loadRight() {
   stopTTS();
+  savePosition();
   const book    = document.getElementById('bookSelR').value;
   const chapter = document.getElementById('chapSelR').value;
   document.getElementById('panelR').innerHTML = '<div class="loading">読み込み中…</div>';
@@ -419,23 +441,7 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── 音声読み上げ ──
-function getReadText(panelId) {
-  const panel = document.getElementById(panelId);
-  let text = '';
-  const title = panel.querySelector('.chapter-title');
-  if (title) text = title.textContent.replace('聖書協会共同訳', '') + '。';
-  panel.querySelectorAll('.verse-para').forEach(p => {
-    let t = '';
-    p.childNodes.forEach(node => {
-      if (node.tagName === 'SUP') return;
-      t += node.textContent;
-    });
-    if (t.trim()) text += t.trim() + '。';
-  });
-  return text.trim();
-}
-
+// ── 音声読み上げ（節単位で読み、読んでいる節をハイライト）──
 function togglePlay(side) {
   const panelId = side === 'L' ? 'panelL' : 'panelR';
   const btnId   = side === 'L' ? 'btnPlayL' : 'btnPlayR';
@@ -445,37 +451,123 @@ function togglePlay(side) {
 
   stopTTS();
 
-  const text = getReadText(panelId);
-  if (!text || text.length < 5) return;
-
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = 'ja-JP';
-  utter.rate = 0.95;
-  utter.pitch = 1.0;
+  const panel = document.getElementById(panelId);
+  const paras = [...panel.querySelectorAll('.verse-para')];
+  if (paras.length === 0) return;
 
   const voices = window.speechSynthesis.getVoices();
   const jaVoice = voices.find(v => v.lang.startsWith('ja'));
-  if (jaVoice) utter.voice = jaVoice;
-
-  utter.onend = () => { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); ttsPlaying = null; };
-  utter.onerror = () => { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); ttsPlaying = null; };
 
   ttsPlaying = side;
   btn.textContent = '■ 停止';
   btn.classList.add('playing');
-  window.speechSynthesis.speak(utter);
+
+  let idx = 0;
+  const speakNext = () => {
+    if (ttsPlaying !== side) return;   // 停止済み
+    if (idx >= paras.length) { stopTTS(); return; }  // 読み終わり
+
+    const p = paras[idx];
+    idx++;
+
+    // 節番号を除いたテキストを取得
+    let t = '';
+    p.childNodes.forEach(node => {
+      if (node.tagName === 'SUP') return;
+      t += node.textContent;
+    });
+    t = t.trim();
+    if (!t) { speakNext(); return; }
+
+    // 読んでいる節をハイライトしてスクロール
+    panel.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+    p.classList.add('tts-active');
+    const rect = p.getBoundingClientRect();
+    const prect = panel.getBoundingClientRect();
+    panel.scrollTop += rect.top - prect.top - panel.clientHeight / 3;
+
+    const u = new SpeechSynthesisUtterance(t);
+    u.lang = 'ja-JP';
+    u.rate = 0.95;
+    u.pitch = 1.0;
+    if (jaVoice) u.voice = jaVoice;
+    u.onend = speakNext;
+    u.onerror = speakNext;
+    window.speechSynthesis.speak(u);
+  };
+  speakNext();
 }
 
 function stopTTS() {
+  const wasPlaying = ttsPlaying;
+  ttsPlaying = null;
   if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
     window.speechSynthesis.cancel();
   }
-  if (ttsPlaying) {
-    const btnId = ttsPlaying === 'L' ? 'btnPlayL' : 'btnPlayR';
+  document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+  if (wasPlaying) {
+    const btnId = wasPlaying === 'L' ? 'btnPlayL' : 'btnPlayR';
     const btn = document.getElementById(btnId);
     if (btn) { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); }
   }
-  ttsPlaying = null;
+}
+
+// ── 文字サイズ調整 ──
+let bodyFs = parseInt(localStorage.getItem('jc_fs') || '15');
+if (isNaN(bodyFs)) bodyFs = 15;
+
+function applyFont() {
+  document.documentElement.style.setProperty('--body-fs', bodyFs + 'px');
+  localStorage.setItem('jc_fs', bodyFs);
+}
+
+function adjustFont(dir) {
+  bodyFs = Math.max(11, Math.min(26, bodyFs + dir));
+  applyFont();
+}
+
+// ── 節の検索（例: ヨハネ3:16） ──
+function z2h(s) {
+  return s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+
+async function goToRef(side) {
+  const input = document.getElementById(side === 'L' ? 'refSearchL' : 'refSearchR');
+  let q = input.value.trim();
+  if (!q) return;
+  q = z2h(q).replace(/：/g, ':');
+
+  // 「書名 章:節」「書名 章」の形式を解析
+  const m = q.match(/^(.+?)\s*(\d+)\s*(?:[:章.]\s*(\d+))?\s*節?$/);
+  if (!m) { input.style.borderColor = '#e53935'; return; }
+
+  const nameQ = m[1].trim();
+  const book = BOOKS.find(b => b.name === nameQ)
+            || BOOKS.find(b => b.name.startsWith(nameQ))
+            || BOOKS.find(b => b.name.includes(nameQ));
+  if (!book) { input.style.borderColor = '#e53935'; return; }
+
+  input.style.borderColor = '';
+  const ch = Math.max(1, Math.min(parseInt(m[2]), book.chapters));
+  const verse = m[3] ? parseInt(m[3]) : null;
+
+  document.getElementById(side === 'L' ? 'bookSelL' : 'bookSelR').value = book.id;
+  buildChapterSelect(side === 'L' ? 'chapSelL' : 'chapSelR', book.id, ch);
+  if (side === 'L') { await loadLeft(); } else { await loadRight(); }
+  if (verse) scrollToVerse(side === 'L' ? 'panelL' : 'panelR', verse);
+}
+
+function scrollToVerse(panelId, v) {
+  const panel = document.getElementById(panelId);
+  const sup = [...panel.querySelectorAll('sup.verse-num')].find(s => parseInt(s.textContent) === v);
+  if (sup) {
+    const para = sup.parentElement;
+    const rect = para.getBoundingClientRect();
+    const prect = panel.getBoundingClientRect();
+    panel.scrollTop += rect.top - prect.top - 40;
+    para.classList.add('tts-active');
+    setTimeout(() => para.classList.remove('tts-active'), 2500);
+  }
 }
 
 // ── CMD+C（節番号あり） / CMD+B（節番号なし） ──
@@ -542,13 +634,45 @@ function clearCredentials() {
 }
 
 // ── 初期化 ──
+// URLパラメータ > 前回の位置（localStorage） > デフォルト の優先順で開始位置を決定
 window.onload = async () => {
-  buildChapterSelect('chapSelL', 'MAT', 1);
-  buildChapterSelect('chapSelR', 'MAT', 1);
+  const params = new URLSearchParams(location.search);
+
+  let bookL = params.get('bookL') || localStorage.getItem('jc_bookL') || 'MAT';
+  if (!BOOK_MAP[bookL]) bookL = 'MAT';
+  let chL = parseInt(params.get('chapL') || localStorage.getItem('jc_chapL') || '1');
+  if (isNaN(chL)) chL = 1;
+  chL = Math.max(1, Math.min(chL, BOOK_MAP[bookL].chapters));
+
+  let bookR = params.get('bookR') || localStorage.getItem('jc_bookR') || 'MAT';
+  if (!BOOK_MAP[bookR]) bookR = 'MAT';
+  let chR = parseInt(params.get('chapR') || localStorage.getItem('jc_chapR') || '1');
+  if (isNaN(chR)) chR = 1;
+  chR = Math.max(1, Math.min(chR, BOOK_MAP[bookR].chapters));
+
+  document.getElementById('bookSelL').value = bookL;
+  document.getElementById('bookSelR').value = bookR;
+  buildChapterSelect('chapSelL', bookL, chL);
+  buildChapterSelect('chapSelR', bookR, chR);
+
+  applyFont();
   await checkStatus();
   loadLeft();
   loadRight();
 };
+
+// 現在位置を保存（次回はここから再開）＋ 共有用にURLへ反映
+function savePosition() {
+  const bookL = document.getElementById('bookSelL').value;
+  const chL   = document.getElementById('chapSelL').value;
+  const bookR = document.getElementById('bookSelR').value;
+  const chR   = document.getElementById('chapSelR').value;
+  localStorage.setItem('jc_bookL', bookL);
+  localStorage.setItem('jc_chapL', chL);
+  localStorage.setItem('jc_bookR', bookR);
+  localStorage.setItem('jc_chapR', chR);
+  history.replaceState(null, '', `?bookL=${bookL}&chapL=${chL}&bookR=${bookR}&chapR=${chR}`);
+}
 
 async function checkStatus() {
   // デバイス保存の認証情報を常に優先（デバイスごとに独立）
