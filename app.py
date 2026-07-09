@@ -207,12 +207,25 @@ def jbs_fetch_chapter(book, chapter):
                 if text:
                     para_verse_frags.append((p_cls, 'heading', text))
                 continue
+            # index は合節 (例: "3-4", "3,4") の場合があるため数字のみに限定しない
             frags = []
-            for vm in re.finditer(r'<a[^>]*class="[^"]*\bv\b[^"]*"[^>]*index="(\d+)"[^>]*>(.*?)</a>', p_inner, re.DOTALL):
-                vnum = int(vm.group(1))
+            for vm in re.finditer(r'<a[^>]*class="[^"]*\bv\b[^"]*"[^>]*index="([^"]+)"[^>]*>(.*?)</a>', p_inner, re.DOTALL):
+                idx_raw = vm.group(1)
+                nums = re.findall(r'\d+', idx_raw)
+                if not nums:
+                    continue
+                vnum = int(nums[0])
+                # 表示ラベル: 合節はそのままの表記 (例: 3-4)、単節は数字
+                label = idx_raw.strip() if len(nums) > 1 else str(vnum)
+                # 本文中の節番号表記 (v-number) があればそちらを優先
+                lbl_m = re.search(r'<span[^>]*class="[^"]*v-number[^"]*"[^>]*>(.*?)</span>', vm.group(2), re.DOTALL)
+                if lbl_m:
+                    lbl_text = re.sub(r'\s+', '', strip_html(lbl_m.group(1)))
+                    if lbl_text:
+                        label = lbl_text
                 text = jbs_strip(vm.group(2))
                 if text:
-                    frags.append((vnum, text))
+                    frags.append((vnum, label, text))
             if frags:
                 para_verse_frags.append((p_cls, 'verse', frags))
 
@@ -234,9 +247,10 @@ def jbs_fetch_chapter(book, chapter):
                 first_vnum = frags[0][0]
                 if p_cls in PARA_BREAK_CLASSES and cur_lines and cur_lines[-1]['num'] != first_vnum:
                     flush_jbs()
+                # 各節のラベルとテキストを保持（合節は "3-4" 表記）
                 cur_lines.append({
                     'num': frags[0][0],
-                    'parts': [[vnum, text] for vnum, text in frags]
+                    'parts': [[label, text] for vnum, label, text in frags]
                 })
 
         flush_jbs()

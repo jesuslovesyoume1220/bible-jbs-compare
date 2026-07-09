@@ -559,7 +559,13 @@ async function goToRef(side) {
 
 function scrollToVerse(panelId, v) {
   const panel = document.getElementById(panelId);
-  const sup = [...panel.querySelectorAll('sup.verse-num')].find(s => parseInt(s.textContent) === v);
+  const sup = [...panel.querySelectorAll('sup.verse-num')].find(s => {
+    // 合節 (例: "3-4") にも対応: 番号がラベルの範囲に含まれれば一致
+    const nums = (s.textContent.match(/\d+/g) || []).map(Number);
+    if (nums.length === 0) return false;
+    if (nums.length === 1) return nums[0] === v;
+    return v >= nums[0] && v <= nums[nums.length - 1];
+  });
   if (sup) {
     const para = sup.parentElement;
     const rect = para.getBoundingClientRect();
