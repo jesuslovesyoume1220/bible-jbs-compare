@@ -330,13 +330,33 @@ def get_media():
     if not _state.get('jbs_logged_in'):
         return jsonify({'error': 'not_logged_in'})
 
-    # 章データからVimeo情報を取得
+    # 章データからVimeo情報を取得（認証切れ・接続エラー時は再ログインして1回リトライ）
     url = f'https://api.si.jbsbibleapp.com/api/v1/bible/SI/{book}/{chapter - 1}'
-    try:
-        resp = JBS_SESSION.get(url, timeout=20)
-        data = resp.json()
-    except Exception as e:
-        return jsonify({'error': f'接続エラー: {e}'})
+    data = None
+    for attempt in range(2):
+        try:
+            resp = JBS_SESSION.get(url, timeout=20)
+        except Exception as e:
+            if attempt == 0:
+                _auto_login_from_env()
+                continue
+            return jsonify({'error': f'接続エラー: {e}'})
+        if resp.status_code in (401, 403):
+            if attempt == 0:
+                _auto_login_from_env()
+                continue
+            return jsonify({'error': 'not_logged_in'})
+        if resp.status_code != 200:
+            return jsonify({'error': f'HTTP {resp.status_code}'})
+        try:
+            data = resp.json()
+        except Exception:
+            return jsonify({'error': 'parse_error'})
+        # ログイン状態が不完全だとmedia_librariesが欠けることがある → 再ログインして1回だけ再取得
+        if not (data or {}).get('media_libraries') and attempt == 0:
+            _auto_login_from_env()
+            continue
+        break
 
     ml = (data or {}).get('media_libraries') or {}
     vimeo = (ml.get('vimeo') or {}).get('data') or {}
