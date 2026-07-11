@@ -313,6 +313,58 @@ def get_chapter():
     return jsonify(result)
 
 
+@app.route('/api/media')
+def get_media():
+    """章の公式朗読音声（Vimeo HLS）のURLを取得。
+    埋め込みはドメイン制限があるため、サーバー側でReferer付きで
+    Vimeo埋め込みページを取得し、playerConfigからHLS URLを抽出して返す。
+    署名付きURLは期限があるためキャッシュしない。"""
+    book = request.args.get('book', 'MAT')
+    try:
+        chapter = int(request.args.get('chapter', '1'))
+    except ValueError:
+        chapter = 1
+
+    if not _state.get('jbs_logged_in'):
+        _auto_login_from_env()
+    if not _state.get('jbs_logged_in'):
+        return jsonify({'error': 'not_logged_in'})
+
+    # 章データからVimeo情報を取得
+    url = f'https://api.si.jbsbibleapp.com/api/v1/bible/SI/{book}/{chapter - 1}'
+    try:
+        resp = JBS_SESSION.get(url, timeout=20)
+        data = resp.json()
+    except Exception as e:
+        return jsonify({'error': f'接続エラー: {e}'})
+
+    ml = (data or {}).get('media_libraries') or {}
+    vimeo = (ml.get('vimeo') or {}).get('data') or {}
+    embed_url = vimeo.get('player_embed_url')
+    if not embed_url:
+        return jsonify({'error': 'no_media'})
+
+    try:
+        sep = '&' if '?' in embed_url else '?'
+        r = requests.get(
+            embed_url + sep + 'app_id=228373',
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Referer': 'https://si.jbsbibleapp.com/',
+            },
+            timeout=20,
+        )
+        m = re.search(r'window\.playerConfig\s*=\s*(\{.*)', r.text)
+        if not m:
+            return jsonify({'error': 'player_config_not_found'})
+        cfg, _ = json.JSONDecoder().raw_decode(m.group(1))
+        cdns = cfg['request']['files']['hls']['cdns']
+        cdn = cdns.get('fastly_skyfire') or cdns.get('akfire_interconnect_quic') or next(iter(cdns.values()))
+        return jsonify({'url': cdn['url'], 'duration': vimeo.get('duration')})
+    except Exception as e:
+        return jsonify({'error': f'media_fetch: {e}'})
+
+
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.get_json()

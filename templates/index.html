@@ -264,6 +264,10 @@
 <!-- コピー完了トースト -->
 <div id="copyToast">✓ 節番号なしでコピーしました</div>
 
+<!-- 公式朗読音声プレーヤー（非表示） -->
+<video id="audioPlayer" style="display:none;" playsinline></video>
+<script src="/static/hls.min.js"></script>
+
 <!-- ログインオーバーレイ -->
 <div class="overlay" id="overlay" onclick="closeBgClick(event)">
   <div class="login-panel">
@@ -441,15 +445,75 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── 音声読み上げ（節単位で読み、読んでいる節をハイライト）──
-function togglePlay(side) {
-  const panelId = side === 'L' ? 'panelL' : 'panelR';
-  const btnId   = side === 'L' ? 'btnPlayL' : 'btnPlayR';
-  const btn     = document.getElementById(btnId);
+// ── 音声再生 ──
+// 「▶ 読む」で元サイト（jbsbibleapp.com）の公式朗読音声を再生。
+// 公式音声がない章はブラウザの読み上げ（TTS）にフォールバック。
+let audioHls = null;
+
+async function togglePlay(side) {
+  const btnId = side === 'L' ? 'btnPlayL' : 'btnPlayR';
+  const btn   = document.getElementById(btnId);
 
   if (ttsPlaying === side) { stopTTS(); return; }
 
   stopTTS();
+
+  const book    = document.getElementById(side === 'L' ? 'bookSelL' : 'bookSelR').value;
+  const chapter = document.getElementById(side === 'L' ? 'chapSelL' : 'chapSelR').value;
+
+  btn.textContent = '読込中…';
+  btn.disabled = true;
+
+  let media = null;
+  try {
+    const res = await fetch(`/api/media?book=${book}&chapter=${chapter}`);
+    media = await res.json();
+  } catch(e) {}
+
+  btn.disabled = false;
+
+  if (media && media.url) {
+    playOfficialAudio(side, media.url, btn);
+  } else {
+    // 公式音声がない場合はブラウザ読み上げ
+    btn.textContent = '▶ 読む';
+    startTTS(side);
+  }
+}
+
+// 公式朗読音声（HLS）を再生
+function playOfficialAudio(side, url, btn) {
+  const player = document.getElementById('audioPlayer');
+
+  ttsPlaying = side;
+  btn.textContent = '■ 停止';
+  btn.classList.add('playing');
+
+  player.onended = () => { if (ttsPlaying === side) stopTTS(); };
+  player.onerror = () => { if (ttsPlaying === side) stopTTS(); };
+
+  if (window.Hls && Hls.isSupported()) {
+    audioHls = new Hls();
+    audioHls.loadSource(url);
+    audioHls.attachMedia(player);
+    audioHls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
+    audioHls.on(Hls.Events.ERROR, (ev, data) => {
+      if (data.fatal && ttsPlaying === side) stopTTS();
+    });
+  } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safariはネイティブ再生
+    player.src = url;
+    player.play();
+  } else {
+    stopTTS();
+  }
+}
+
+// ブラウザ読み上げ（節単位・ハイライト付き）: 公式音声がない章のフォールバック
+function startTTS(side) {
+  const panelId = side === 'L' ? 'panelL' : 'panelR';
+  const btnId   = side === 'L' ? 'btnPlayL' : 'btnPlayR';
+  const btn     = document.getElementById(btnId);
 
   const panel = document.getElementById(panelId);
   const paras = [...panel.querySelectorAll('.verse-para')];
@@ -501,14 +565,27 @@ function togglePlay(side) {
 function stopTTS() {
   const wasPlaying = ttsPlaying;
   ttsPlaying = null;
+
+  // TTS停止
   if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
     window.speechSynthesis.cancel();
   }
+  // 公式音声停止
+  const player = document.getElementById('audioPlayer');
+  if (player) {
+    player.pause();
+    player.removeAttribute('src');
+  }
+  if (audioHls) {
+    audioHls.destroy();
+    audioHls = null;
+  }
+
   document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
   if (wasPlaying) {
     const btnId = wasPlaying === 'L' ? 'btnPlayL' : 'btnPlayR';
     const btn = document.getElementById(btnId);
-    if (btn) { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); }
+    if (btn) { btn.textContent = '▶ 読む'; btn.classList.remove('playing'); btn.disabled = false; }
   }
 }
 
