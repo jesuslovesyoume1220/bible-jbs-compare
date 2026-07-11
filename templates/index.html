@@ -67,7 +67,25 @@
 
   .panel-wrapper {
     flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+    position: relative;
   }
+
+  /* ── 再生バー（パネル下中央） ── */
+  .audio-bar {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 10px;
+    background: rgba(22, 33, 62, 0.94); border: 1px solid #1a5276; border-radius: 12px;
+    padding: 9px 16px; z-index: 50; width: min(85%, 440px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .audio-bar.show { display: flex; }
+  .audio-bar button {
+    background: #1a5276; border: none; color: #fff; border-radius: 6px;
+    padding: 5px 12px; font-size: 15px; cursor: pointer; flex-shrink: 0;
+  }
+  .audio-bar button:hover { background: #2874a6; }
+  .audio-bar input[type=range] { flex: 1; accent-color: #7eb8f7; cursor: pointer; min-width: 80px; }
+  .audio-bar .audio-time { font-size: 11px; color: #c8e0ff; white-space: nowrap; flex-shrink: 0; }
 
   .panel-header {
     background: #16213e; padding: 6px 10px;
@@ -237,6 +255,12 @@
     <div class="panel-body" id="panelL">
       <div class="loading">読み込み中…</div>
     </div>
+    <div class="audio-bar" id="audioBarL">
+      <button id="audioToggleL" onclick="audioPauseToggle('L')" title="一時停止/再生">⏸</button>
+      <input type="range" id="audioSeekL" min="0" max="100" step="0.1" value="0" oninput="audioSeek(this.value)">
+      <span class="audio-time" id="audioTimeL">0:00 / 0:00</span>
+      <button onclick="stopTTS()" title="停止">✕</button>
+    </div>
   </div>
 
   <!-- 右パネル -->
@@ -256,6 +280,12 @@
     </div>
     <div class="panel-body" id="panelR">
       <div class="loading">読み込み中…</div>
+    </div>
+    <div class="audio-bar" id="audioBarR">
+      <button id="audioToggleR" onclick="audioPauseToggle('R')" title="一時停止/再生">⏸</button>
+      <input type="range" id="audioSeekR" min="0" max="100" step="0.1" value="0" oninput="audioSeek(this.value)">
+      <span class="audio-time" id="audioTimeR">0:00 / 0:00</span>
+      <button onclick="stopTTS()" title="停止">✕</button>
     </div>
   </div>
 
@@ -489,8 +519,17 @@ function playOfficialAudio(side, url, btn) {
   btn.textContent = '■ 停止';
   btn.classList.add('playing');
 
+  // 再生バーを表示
+  showAudioBar(side);
+
   player.onended = () => { if (ttsPlaying === side) stopTTS(); };
   player.onerror = () => { if (ttsPlaying === side) stopTTS(); };
+  player.ontimeupdate = () => updateAudioBar(side);
+  player.onloadedmetadata = () => {
+    const seek = document.getElementById(side === 'L' ? 'audioSeekL' : 'audioSeekR');
+    if (seek && isFinite(player.duration)) seek.max = player.duration;
+    updateAudioBar(side);
+  };
 
   if (window.Hls && Hls.isSupported()) {
     audioHls = new Hls();
@@ -507,6 +546,50 @@ function playOfficialAudio(side, url, btn) {
   } else {
     stopTTS();
   }
+}
+
+// ── 再生バー ──
+function fmtTime(t) {
+  if (!isFinite(t)) t = 0;
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function showAudioBar(side) {
+  document.getElementById('audioBarL').classList.toggle('show', side === 'L');
+  document.getElementById('audioBarR').classList.toggle('show', side === 'R');
+  const toggle = document.getElementById(side === 'L' ? 'audioToggleL' : 'audioToggleR');
+  if (toggle) toggle.textContent = '⏸';
+}
+
+function updateAudioBar(side) {
+  if (ttsPlaying !== side) return;
+  const player = document.getElementById('audioPlayer');
+  const seek = document.getElementById(side === 'L' ? 'audioSeekL' : 'audioSeekR');
+  const time = document.getElementById(side === 'L' ? 'audioTimeL' : 'audioTimeR');
+  if (seek && !seek.matches(':active')) seek.value = player.currentTime;
+  if (time) time.textContent = `${fmtTime(player.currentTime)} / ${fmtTime(player.duration)}`;
+}
+
+// 一時停止 ⇄ 再生
+function audioPauseToggle(side) {
+  if (ttsPlaying !== side) return;
+  const player = document.getElementById('audioPlayer');
+  const toggle = document.getElementById(side === 'L' ? 'audioToggleL' : 'audioToggleR');
+  if (player.paused) {
+    player.play();
+    if (toggle) toggle.textContent = '⏸';
+  } else {
+    player.pause();
+    if (toggle) toggle.textContent = '▶';
+  }
+}
+
+// シークバー操作で再生位置を移動
+function audioSeek(v) {
+  const player = document.getElementById('audioPlayer');
+  if (isFinite(v)) player.currentTime = parseFloat(v);
 }
 
 // ブラウザ読み上げ（節単位・ハイライト付き）: 公式音声がない章のフォールバック
@@ -580,6 +663,10 @@ function stopTTS() {
     audioHls.destroy();
     audioHls = null;
   }
+
+  // 再生バーを隠す
+  document.getElementById('audioBarL').classList.remove('show');
+  document.getElementById('audioBarR').classList.remove('show');
 
   document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
   if (wasPlaying) {
