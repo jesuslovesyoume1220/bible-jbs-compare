@@ -86,6 +86,11 @@
   .audio-bar button:hover { background: #588c5c; }
   .audio-bar input[type=range] { flex: 1; accent-color: #4a7d4e; cursor: pointer; min-width: 80px; }
   .audio-bar .audio-time { font-size: 11px; color: #3d5a3f; white-space: nowrap; flex-shrink: 0; }
+  .audio-bar select.audio-speed {
+    background: #ffffff; color: #3d5a3f; border: 1px solid #a5c9a8; border-radius: 6px;
+    padding: 3px 4px; font-size: 12px; font-family: inherit; cursor: pointer;
+    outline: none; flex-shrink: 0;
+  }
 
   .panel-header {
     background: #16213e; padding: 6px 10px;
@@ -254,6 +259,13 @@
       <button id="audioToggleL" onclick="audioPauseToggle('L')" title="一時停止/再生">⏸</button>
       <input type="range" id="audioSeekL" min="0" max="100" step="0.1" value="0" oninput="audioSeek(this.value)">
       <span class="audio-time" id="audioTimeL">0:00 / 0:00</span>
+      <select class="audio-speed" id="audioSpeedL" onchange="setAudioSpeed(this.value)" title="再生速度">
+        <option value="2">x2</option>
+        <option value="1.5">x1.5</option>
+        <option value="1.2">x1.2</option>
+        <option value="1" selected>x1</option>
+        <option value="0.8">x0.8</option>
+      </select>
       <button onclick="stopTTS()" title="停止">✕</button>
     </div>
   </div>
@@ -280,6 +292,13 @@
       <button id="audioToggleR" onclick="audioPauseToggle('R')" title="一時停止/再生">⏸</button>
       <input type="range" id="audioSeekR" min="0" max="100" step="0.1" value="0" oninput="audioSeek(this.value)">
       <span class="audio-time" id="audioTimeR">0:00 / 0:00</span>
+      <select class="audio-speed" id="audioSpeedR" onchange="setAudioSpeed(this.value)" title="再生速度">
+        <option value="2">x2</option>
+        <option value="1.5">x1.5</option>
+        <option value="1.2">x1.2</option>
+        <option value="1" selected>x1</option>
+        <option value="0.8">x0.8</option>
+      </select>
       <button onclick="stopTTS()" title="停止">✕</button>
     </div>
   </div>
@@ -523,6 +542,7 @@ function playOfficialAudio(side, url, btn) {
   player.onloadedmetadata = () => {
     const seek = document.getElementById(side === 'L' ? 'audioSeekL' : 'audioSeekR');
     if (seek && isFinite(player.duration)) seek.max = player.duration;
+    player.playbackRate = getAudioSpeed();  // メディア読込で速度がリセットされるため再適用
     updateAudioBar(side);
   };
 
@@ -556,6 +576,8 @@ function showAudioBar(side) {
   document.getElementById('audioBarR').classList.toggle('show', side === 'R');
   const toggle = document.getElementById(side === 'L' ? 'audioToggleL' : 'audioToggleR');
   if (toggle) toggle.textContent = '⏸';
+  // 保存済みの再生速度を適用
+  setAudioSpeed(getAudioSpeed());
 }
 
 function updateAudioBar(side) {
@@ -585,6 +607,25 @@ function audioPauseToggle(side) {
 function audioSeek(v) {
   const player = document.getElementById('audioPlayer');
   if (isFinite(v)) player.currentTime = parseFloat(v);
+}
+
+// ── 再生速度 ──
+function getAudioSpeed() {
+  const v = parseFloat(localStorage.getItem('jc_speed') || '1');
+  return isFinite(v) && v > 0 ? v : 1;
+}
+
+function setAudioSpeed(v) {
+  const speed = parseFloat(v) || 1;
+  localStorage.setItem('jc_speed', speed);
+  const player = document.getElementById('audioPlayer');
+  player.playbackRate = speed;
+  player.defaultPlaybackRate = speed;
+  // 左右のセレクトを同期
+  ['audioSpeedL', 'audioSpeedR'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.value = String(speed);
+  });
 }
 
 // ブラウザ読み上げ（節単位・ハイライト付き）: 公式音声がない章のフォールバック
