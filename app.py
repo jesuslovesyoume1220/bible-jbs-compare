@@ -193,65 +193,64 @@ def jbs_fetch_chapter(book, chapter):
             s = strip_html(s)
             return re.sub(r'\s+', ' ', s).strip()
 
-        para_list = []
+        HEADING_CLASSES = {'s', 's1', 's2', 's3'}
+
+        # ── 文書順に全要素（見出し・段落の開閉・節）を収集 ──
+        # ※ 節アンカー <a class="v"> は <p> の外に「はみ出す」ことがあるため、
+        #    <p> 単位ではなく HTML 全体から拾う（従来は <p> 外の節を取りこぼしていた）
+        events = []
         for pm in re.finditer(r'<p\b([^>]*)>(.*?)</p>', html, re.DOTALL):
             cls_m = re.search(r'class="([^"]*)"', pm.group(1))
             cls = cls_m.group(1) if cls_m else ''
-            para_list.append((pm.start(), cls, pm.group(2)))
-
-        para_verse_frags = []
-        HEADING_CLASSES = {'s', 's1', 's2', 's3'}
-        for p_start, p_cls, p_inner in para_list:
-            if p_cls in HEADING_CLASSES:
-                text = jbs_strip(p_inner)
+            inner = pm.group(2)
+            if cls in HEADING_CLASSES:
+                text = jbs_strip(inner)
                 if text:
-                    para_verse_frags.append((p_cls, 'heading', text))
+                    events.append((pm.start(), 0, 'heading', text))
+            else:
+                events.append((pm.start(), 0, 'popen', None))
+                events.append((pm.end(), 2, 'pclose', None))
+
+        for vm in re.finditer(r'<a[^>]*class="[^"]*\bv\b[^"]*"[^>]*index="([^"]+)"[^>]*>(.*?)</a>', html, re.DOTALL):
+            idx_raw = vm.group(1)
+            nums = re.findall(r'\d+', idx_raw)
+            if not nums:
                 continue
-            # index は合節 (例: "3-4", "3,4") の場合があるため数字のみに限定しない
-            frags = []
-            for vm in re.finditer(r'<a[^>]*class="[^"]*\bv\b[^"]*"[^>]*index="([^"]+)"[^>]*>(.*?)</a>', p_inner, re.DOTALL):
-                idx_raw = vm.group(1)
-                nums = re.findall(r'\d+', idx_raw)
-                if not nums:
-                    continue
-                vnum = int(nums[0])
-                # 表示ラベル: 合節はそのままの表記 (例: 3-4)、単節は数字
-                label = idx_raw.strip() if len(nums) > 1 else str(vnum)
-                # 本文中の節番号表記 (v-number) があればそちらを優先
-                lbl_m = re.search(r'<span[^>]*class="[^"]*v-number[^"]*"[^>]*>(.*?)</span>', vm.group(2), re.DOTALL)
-                if lbl_m:
-                    lbl_text = re.sub(r'\s+', '', strip_html(lbl_m.group(1)))
-                    if lbl_text:
-                        label = lbl_text
-                text = jbs_strip(vm.group(2))
-                if text:
-                    frags.append((vnum, label, text))
-            if frags:
-                para_verse_frags.append((p_cls, 'verse', frags))
+            vnum = int(nums[0])
+            label = idx_raw.strip() if len(nums) > 1 else str(vnum)
+            lbl_m = re.search(r'<span[^>]*class="[^"]*v-number[^"]*"[^>]*>(.*?)</span>', vm.group(2), re.DOTALL)
+            if lbl_m:
+                lbl_text = re.sub(r'\s+', '', strip_html(lbl_m.group(1)))
+                if lbl_text:
+                    label = lbl_text
+            text = jbs_strip(vm.group(2))
+            if text:
+                events.append((vm.start(), 1, 'verse', vnum, label, text))
 
-        cur_lines = []
-        PARA_BREAK_CLASSES = {'p', 'pi', 'm', 'mi', 'nb'}
+        events.sort(key=lambda e: (e[0], e[1]))
+
+        cur_parts = []
+        cur_first = [None]
 
         def flush_jbs():
-            if cur_lines:
-                items.append({'type': 'para', 'lines': list(cur_lines)})
-                cur_lines.clear()
+            if cur_parts:
+                items.append({'type': 'para', 'lines': [
+                    {'num': cur_first[0], 'parts': list(cur_parts)}]})
+                cur_parts.clear()
+                cur_first[0] = None
 
-        for entry in para_verse_frags:
-            p_cls, etype = entry[0], entry[1]
-            if etype == 'heading':
+        for ev in events:
+            kind = ev[2]
+            if kind == 'heading':
                 flush_jbs()
-                items.append({'type': 'heading', 'text': entry[2]})
-            elif etype == 'verse':
-                frags = entry[2]
-                first_vnum = frags[0][0]
-                if p_cls in PARA_BREAK_CLASSES and cur_lines and cur_lines[-1]['num'] != first_vnum:
-                    flush_jbs()
-                # 各節のラベルとテキストを保持（合節は "3-4" 表記）
-                cur_lines.append({
-                    'num': frags[0][0],
-                    'parts': [[label, text] for vnum, label, text in frags]
-                })
+                items.append({'type': 'heading', 'text': ev[3]})
+            elif kind in ('popen', 'pclose'):
+                flush_jbs()
+            elif kind == 'verse':
+                vnum, label, text = ev[3], ev[4], ev[5]
+                if cur_first[0] is None:
+                    cur_first[0] = vnum
+                cur_parts.append([label, text])
 
         flush_jbs()
 
