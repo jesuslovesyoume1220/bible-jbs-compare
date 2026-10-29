@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-聖書協会共同訳 対照アプリ
+聖書協会訳対照
 左右両パネルとも聖書協会共同訳（jbsbibleapp.com）を表示し、それぞれ異なる箇所を選択できる
 """
 
@@ -162,6 +162,19 @@ BOOKS = [
 BOOK_MAP = {b['id']: b for b in BOOKS}
 
 
+def parse_book_chapter(args):
+    """リクエストの書・章が正しいか確かめる。正しくなければ (None, None)"""
+    book = args.get('book', 'MAT')
+    try:
+        chapter = int(args.get('chapter', '1'))
+    except ValueError:
+        return None, None
+    info = BOOK_MAP.get(book)
+    if not info or not 1 <= chapter <= info['chapters']:
+        return None, None
+    return book, chapter
+
+
 def strip_html(text):
     return re.sub(r'<[^>]+>', '', text).strip()
 
@@ -295,33 +308,14 @@ def jbs_fetch_chapter(book, chapter):
 
         flush_jbs()
 
-    elif isinstance(data, dict) and 'verses' in data:
-        verses = []
-        for v in data['verses']:
-            vnum = v.get('order') or v.get('verse') or v.get('num')
-            text = strip_html(v.get('text') or v.get('content') or '')
-            if vnum and text:
-                verses.append({'num': int(vnum), 'text': text})
-        if verses:
-            items.append({'type': 'para', 'verses': sorted(verses, key=lambda x: x['num'])})
-
-    elif isinstance(data, list):
-        verses = []
-        for v in data:
-            vnum = v.get('order') or v.get('verse') or v.get('num')
-            text = strip_html(v.get('text') or v.get('content') or '')
-            if vnum and text:
-                verses.append({'num': int(vnum), 'text': text})
-        if verses:
-            items.append({'type': 'para', 'verses': sorted(verses, key=lambda x: x['num'])})
-
     total = sum(len(i.get('lines', [])) for i in items if i['type'] == 'para')
     result = {
         'title': f'{book_info["name"]} {chapter}章',
         'items': items,
         'count': total,
     }
-    CACHE[key] = result
+    if items:  # 空の結果は覚えない（一時的な不具合を再起動まで引きずらない）
+        CACHE[key] = result
     return result
 
 
@@ -333,11 +327,9 @@ def index():
 
 @app.route('/api/chapter')
 def get_chapter():
-    book = request.args.get('book', 'MAT')
-    try:
-        chapter = int(request.args.get('chapter', '1'))
-    except ValueError:
-        chapter = 1
+    book, chapter = parse_book_chapter(request.args)
+    if not book:
+        return jsonify({'error': '書名または章が正しくありません', 'items': [], 'count': 0})
 
     if not jbs_logged_in():
         return jsonify({'error': 'not_logged_in', 'items': [], 'count': 0})
@@ -356,11 +348,9 @@ def get_media():
     埋め込みはドメイン制限があるため、サーバー側でReferer付きで
     Vimeo埋め込みページを取得し、playerConfigからHLS URLを抽出して返す。
     署名付きURLは期限があるためキャッシュしない。"""
-    book = request.args.get('book', 'MAT')
-    try:
-        chapter = int(request.args.get('chapter', '1'))
-    except ValueError:
-        chapter = 1
+    book, chapter = parse_book_chapter(request.args)
+    if not book:
+        return jsonify({'error': 'bad_request'})
 
     if not jbs_logged_in():
         return jsonify({'error': 'not_logged_in'})
@@ -433,5 +423,5 @@ def api_status():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5052))
-    print(f'聖書協会共同訳対照アプリを起動します: http://localhost:{port}')
+    print(f'聖書協会訳対照を起動します: http://localhost:{port}')
     app.run(host='0.0.0.0', debug=False, port=port)

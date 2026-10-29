@@ -65,18 +65,16 @@
   /* ── 上のバーは水色（3つのページで揃える） ── */
   header { background: #4fc3f7; border-bottom: 1px solid #29a9e0; }
   header h1 { color: #0d3b66; }
-  header select, header input { background: #ffffff; color: #1a1a1a; border-color: #29a9e0; }
-  header .btn-nav, header .btn-login-header {
+  header .btn-login-header {
     background: #ffffff; color: #0d6aa8; border: 1px solid #29a9e0;
   }
-  header .btn-nav:hover, header .btn-login-header:hover { background: #e1f5fe; }
+  header .btn-login-header:hover { background: #e1f5fe; }
   header .status-bar { color: #0d3b66; }
   header .status-bar.ok { color: #1b5e20; }
   header .status-bar.ng { color: #c62828; }
 
   /* ── 本文の上のバーは、上のバーより薄い水色 ── */
   .panels .panel-header { background: #b3e5fc; border-bottom: 1px solid #81d4fa; }
-  .panel-header .panel-title, .panel-header .panel-label { color: #0d3b66; }
   .panel-header select, .panel-header .ref-search {
     background: #ffffff; color: #1a1a1a; border: 1px solid #81d4fa;
   }
@@ -416,13 +414,18 @@ function navR(dir) {
 }
 
 // ── データ読み込み ──
+// 左右それぞれの読み込み番号（続けて章を変えたとき、遅れて届いた古い章で上書きしないため）
+const loadSeq = { L: 0, R: 0 };
+
 async function loadLeft() {
   stopTTS();
   savePosition();
+  const seq = ++loadSeq.L;
   const book    = document.getElementById('bookSelL').value;
   const chapter = document.getElementById('chapSelL').value;
   document.getElementById('panelL').innerHTML = '<div class="loading">読み込み中…</div>';
   const data = await fetchChapter(book, chapter);
+  if (seq !== loadSeq.L) return;  // その後に別の章を開いた
   renderPanel('panelL', data);
   document.getElementById('panelL').scrollTop = 0;
 }
@@ -430,10 +433,12 @@ async function loadLeft() {
 async function loadRight() {
   stopTTS();
   savePosition();
+  const seq = ++loadSeq.R;
   const book    = document.getElementById('bookSelR').value;
   const chapter = document.getElementById('chapSelR').value;
   document.getElementById('panelR').innerHTML = '<div class="loading">読み込み中…</div>';
   const data = await fetchChapter(book, chapter);
+  if (seq !== loadSeq.R) return;  // その後に別の章を開いた
   renderPanel('panelR', data);
   document.getElementById('panelR').scrollTop = 0;
 }
@@ -481,26 +486,16 @@ function renderPanel(panelId, data) {
     } else if (item.type === 'para' && item.lines) {
       item.lines.forEach(line => {
         let lineHtml = '';
-        if (line.parts && line.parts.length > 0) {
-          line.parts.forEach(part => {
-            const num = part[0], text = part[1];
-            if (num !== lastShownNum) {
-              lineHtml += `<sup class="verse-num">${num}</sup>`;
-              lastShownNum = num;
-            }
-            lineHtml += esc(text) + ' ';
-          });
-        } else {
-          if (line.num !== lastShownNum) {
-            lineHtml = `<sup class="verse-num">${line.num}</sup>`;
-            lastShownNum = line.num;
+        (line.parts || []).forEach(part => {
+          const num = part[0], text = part[1];
+          if (num !== lastShownNum) {
+            lineHtml += `<sup class="verse-num">${num}</sup>`;
+            lastShownNum = num;
           }
-          lineHtml += esc(line.text || '');
-        }
+          lineHtml += esc(text) + ' ';
+        });
         html += `<p class="verse-para">${lineHtml.trim()}</p>`;
       });
-    } else if (item.type === 'verse') {
-      html += `<p class="verse-para"><sup class="verse-num">${item.num}</sup>${esc(item.text)}</p>`;
     }
   });
 
@@ -804,6 +799,7 @@ document.addEventListener('keydown', async (e) => {
   const isCopy = (e.metaKey || e.ctrlKey) && e.key === 'c';
   const isNoCopy = (e.metaKey || e.ctrlKey) && e.key === 'b';
   if (!isCopy && !isNoCopy) return;
+  if (e.target.closest && e.target.closest('input, textarea')) return;  // 入力欄では普通のコピー
 
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) return;
@@ -1009,9 +1005,10 @@ async function doLogout() {
   await fetch('/api/logout', { method: 'POST' });
   isLoggedIn = false;
   updateStatusBar({ logged_in: false, email: '' });
+  loadSeq.L++; loadSeq.R++;  // 読み込み中の章が、ログアウト後に表示されないように
   const msg = `<div class="need-login">
     <h3>🔑 ログインが必要です</h3>
-    <p>右上の「ログイン」ボタンからログインしてください</p>
+    <p>右上の「ログイン」ボタンから<br>ウェブバイブルのアカウントでログインしてください</p>
     <button onclick="openLogin()">ログインする</button>
   </div>`;
   document.getElementById('panelL').innerHTML = msg;
