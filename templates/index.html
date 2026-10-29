@@ -7,7 +7,7 @@
 
 <link rel="icon" type="image/png" href="/static/icons/icon-256.png">
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#16213e">
+<meta name="theme-color" content="#4fc3f7">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="聖書協会訳対照">
@@ -61,6 +61,33 @@
     border: 1px solid #90caf9; padding: 5px 12px; font-size: 13px;
   }
   .btn-login-header:hover { background: #e3f2fd; }
+
+  /* ── 上のバーは水色（3つのページで揃える） ── */
+  header { background: #4fc3f7; border-bottom: 1px solid #29a9e0; }
+  header h1 { color: #0d3b66; }
+  header select, header input { background: #ffffff; color: #1a1a1a; border-color: #29a9e0; }
+  header .btn-nav, header .btn-login-header {
+    background: #ffffff; color: #0d6aa8; border: 1px solid #29a9e0;
+  }
+  header .btn-nav:hover, header .btn-login-header:hover { background: #e1f5fe; }
+  header .status-bar { color: #0d3b66; }
+  header .status-bar.ok { color: #1b5e20; }
+  header .status-bar.ng { color: #c62828; }
+
+  /* ── 本文の上のバーは、上のバーより薄い水色 ── */
+  .panels .panel-header { background: #b3e5fc; border-bottom: 1px solid #81d4fa; }
+  .panel-header .panel-title, .panel-header .panel-label { color: #0d3b66; }
+  .panel-header select, .panel-header .ref-search {
+    background: #ffffff; color: #1a1a1a; border: 1px solid #81d4fa;
+  }
+  .panel-header .btn-nav, .panel-header .btn-play {
+    background: #ffffff; color: #0d6aa8; border: 1px solid #81d4fa;
+  }
+  .panel-header .btn-nav:hover, .panel-header .btn-play:hover { background: #e1f5fe; }
+  .panel-header .btn-play.playing { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
+
+  /* ◀ ▶ は小さめ */
+  .btn-nav.btn-arrow { font-size: 12px; padding: 5px 9px; }
 
   /* ── パネル ── */
   .panels { display: flex; flex: 1; overflow: hidden; gap: 2px; background: #0f3460; }
@@ -228,7 +255,7 @@
     <button class="btn-login-header" id="btnLoginHeader" onclick="openLogin()">🔑 ログイン</button>
     <button class="btn-login-header" id="btnLogout" onclick="doLogout()" style="display:none;color:#c62828;border-color:#ef9a9a;">ログアウト</button>
   </div>
-  <span style="position:absolute;left:50%;transform:translateX(-50%);font-size:12px;color:#ffffff;white-space:nowrap;pointer-events:none;">節番号なしでコピー　→　CMD+B</span>
+  <span style="position:absolute;left:50%;transform:translateX(-50%);font-size:12px;color:#0d3b66;white-space:nowrap;pointer-events:none;">節番号なしでコピー → CMD+B</span>
   <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
     <button class="btn-login-header" onclick="adjustFont(-1)" style="font-size:12px;" title="文字を小さく">A−</button>
     <button class="btn-login-header" onclick="adjustFont(1)" style="font-size:15px;" title="文字を大きく">A＋</button>
@@ -246,8 +273,8 @@
         {% endfor %}
       </select>
       <select id="chapSelL" onchange="loadLeft()"></select>
-      <button class="btn-nav" onclick="navL(-1)">◀</button>
-      <button class="btn-nav" onclick="navL(1)">▶</button>
+      <button class="btn-nav btn-arrow" onclick="navL(-1)">◀</button>
+      <button class="btn-nav btn-arrow" onclick="navL(1)">▶</button>
       <input class="ref-search" id="refSearchL" placeholder="例: ヨハネ3:16" onkeydown="if(event.key==='Enter') goToRef('L')">
       <button class="btn-nav" onclick="goToRef('L')" style="font-size:13px;">移動</button>
       <button class="btn-play" id="btnPlayL" onclick="togglePlay('L')">▶ 読む</button>
@@ -279,8 +306,8 @@
         {% endfor %}
       </select>
       <select id="chapSelR" onchange="loadRight()"></select>
-      <button class="btn-nav" onclick="navR(-1)">◀</button>
-      <button class="btn-nav" onclick="navR(1)">▶</button>
+      <button class="btn-nav btn-arrow" onclick="navR(-1)">◀</button>
+      <button class="btn-nav btn-arrow" onclick="navR(1)">▶</button>
       <input class="ref-search" id="refSearchR" placeholder="例: ヨハネ3:16" onkeydown="if(event.key==='Enter') goToRef('R')">
       <button class="btn-nav" onclick="goToRef('R')" style="font-size:13px;">移動</button>
       <button class="btn-play" id="btnPlayR" onclick="togglePlay('R')">▶ 読む</button>
