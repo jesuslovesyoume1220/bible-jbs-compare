@@ -431,6 +431,7 @@ function renderPanel(panelId, data) {
   const panel = document.getElementById(panelId);
 
   if (data.error === 'not_logged_in') {
+    if (isLoggedIn) { isLoggedIn = false; updateStatusBar({ logged_in: false, email: '' }); }
     panel.innerHTML = `
       <div class="need-login">
         <h3>🔑 ログインが必要です</h3>
@@ -823,21 +824,16 @@ function showCopyToast() {
 }
 
 // ── localStorage ──
-function saveCredentials(email, password) {
-  localStorage.setItem('jbs_email', email);
-  localStorage.setItem('jbs_password', password);
+// ログインはこの端末のCookieで保たれる（サーバー側）。ここではメールアドレスだけ覚える
+function saveEmail(email) {
+  try { localStorage.setItem('jbs_email', email); } catch(e) {}
 }
-
-function loadCredentials() {
-  return {
-    email:    localStorage.getItem('jbs_email') || '',
-    password: localStorage.getItem('jbs_password') || '',
-  };
+function loadEmail() {
+  try { return localStorage.getItem('jbs_email') || ''; } catch(e) { return ''; }
 }
-
-function clearCredentials() {
-  localStorage.removeItem('jbs_email');
-  localStorage.removeItem('jbs_password');
+// 以前の版がこの端末に保存したパスワードを消す
+function forgetSavedPassword() {
+  try { localStorage.removeItem('jbs_password'); } catch(e) {}
 }
 
 // ── 初期化 ──
@@ -882,34 +878,11 @@ function savePosition() {
 }
 
 async function checkStatus() {
-  // デバイス保存の認証情報を常に優先（デバイスごとに独立）
-  const creds = loadCredentials();
-  if (creds.email && creds.password) {
-    const ok = await autoLoginWithCredentials(creds.email, creds.password);
-    if (ok) return;
-  }
-  // localStorage未設定の場合はサーバー状態を確認
+  forgetSavedPassword();
   const res = await fetch('/api/status');
   const data = await res.json();
   isLoggedIn = data.logged_in;
   updateStatusBar(data);
-}
-
-async function autoLoginWithCredentials(email, password) {
-  try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      isLoggedIn = true;
-      updateStatusBar({ logged_in: true, email });
-      return true;
-    }
-  } catch(e) {}
-  return false;
 }
 
 function updateStatusBar(data) {
@@ -936,16 +909,14 @@ function openLogin() {
   document.getElementById('loginTitle').textContent = '🔑 聖書協会共同訳 ログイン';
   document.getElementById('loginError').style.display = 'none';
   document.getElementById('loginSuccess').style.display = 'none';
-  // localStorageの保存済み認証情報を事前入力
-  const creds = loadCredentials();
-  document.getElementById('loginEmail').value = creds.email;
-  document.getElementById('loginPassword').value = creds.password;
+  // 前回のメールアドレスを事前入力（パスワードはブラウザのパスワード管理に任せる）
+  const email = loadEmail();
+  document.getElementById('loginEmail').value = email;
+  document.getElementById('loginPassword').value = '';
   document.getElementById('rememberMe').checked = true;
   document.getElementById('overlay').classList.add('open');
   setTimeout(() => {
-    const pwField = document.getElementById('loginPassword');
-    pwField.focus();
-    if (!creds.password) document.getElementById('loginEmail').focus();
+    document.getElementById(email ? 'loginPassword' : 'loginEmail').focus();
   }, 100);
 }
 
@@ -953,8 +924,7 @@ function openChangeLogin() {
   document.getElementById('loginTitle').textContent = '🔑 ログインIDを変更';
   document.getElementById('loginError').style.display = 'none';
   document.getElementById('loginSuccess').style.display = 'none';
-  const creds = loadCredentials();
-  document.getElementById('loginEmail').value = creds.email;
+  document.getElementById('loginEmail').value = loadEmail();
   document.getElementById('loginPassword').value = '';
   document.getElementById('rememberMe').checked = true;
   document.getElementById('overlay').classList.add('open');
@@ -991,16 +961,12 @@ async function doLogin() {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      // remember: 「次回から自動ログイン」→ この端末のログインを90日保つ（オフならブラウザを閉じるまで）
+      body: JSON.stringify({ email, password, remember })
     });
     const data = await res.json();
     if (data.ok) {
-      // 「次回から自動ログイン」が有効なら保存
-      if (remember) {
-        saveCredentials(email, password);
-      } else {
-        clearCredentials();
-      }
+      saveEmail(email);
       okDiv.style.display = 'block';
       isLoggedIn = true;
       updateStatusBar({ logged_in: true, email });
@@ -1023,7 +989,6 @@ async function doLogin() {
 
 async function doLogout() {
   stopTTS();
-  clearCredentials();
   await fetch('/api/logout', { method: 'POST' });
   isLoggedIn = false;
   updateStatusBar({ logged_in: false, email: '' });
