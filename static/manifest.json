@@ -1,6 +1,6 @@
 {
-  "name": "聖書協会共同訳",
-  "short_name": "聖書協会共同訳",
+  "name": "聖書協会訳対照",
+  "short_name": "聖書協会訳対照",
   "description": "聖書協会共同訳の異なる箇所を左右に並べて読み比べ",
   "start_url": "/",
   "display": "standalone",

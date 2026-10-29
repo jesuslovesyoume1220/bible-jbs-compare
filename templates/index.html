@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>聖書協会共同訳 対照</title>
+<title>聖書協会訳対照</title>
 
 <link rel="icon" type="image/png" href="/static/icons/icon-256.png">
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#16213e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="聖書対照">
+<meta name="apple-mobile-web-app-title" content="聖書協会訳対照">
 <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -222,7 +222,7 @@
 <body>
 
 <header>
-  <h1><img src="/static/icons/icon-256.png" style="height:22px;width:22px;vertical-align:middle;margin-right:6px;border-radius:4px;"> 聖書協会共同訳</h1>
+  <h1><img src="/static/icons/icon-256.png" style="height:22px;width:22px;vertical-align:middle;margin-right:6px;border-radius:4px;"> 聖書協会訳対照</h1>
   <div style="display:flex;align-items:center;gap:6px;">
     <span id="statusBar" class="status-bar">確認中…</span>
     <button class="btn-login-header" id="btnLoginHeader" onclick="openLogin()">🔑 ログイン</button>
@@ -315,7 +315,7 @@
 <!-- ログインオーバーレイ -->
 <div class="overlay" id="overlay" onclick="closeBgClick(event)">
   <div class="login-panel">
-    <h2 id="loginTitle">🔑 聖書協会共同訳 ログイン</h2>
+    <h2 id="loginTitle">🔑 ウェブバイブルにログイン</h2>
     <div class="form-group">
       <label>メールアドレス</label>
       <input type="email" id="loginEmail" placeholder="example@gmail.com" autocomplete="username">
@@ -324,12 +324,6 @@
       <label>パスワード</label>
       <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password"
              onkeydown="if(event.key==='Enter') doLogin()">
-    </div>
-    <div style="margin-top:8px;">
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#8aabca;cursor:pointer;">
-        <input type="checkbox" id="rememberMe" checked style="width:16px;height:16px;cursor:pointer;">
-        次回から自動ログイン
-      </label>
     </div>
     <div class="login-error" id="loginError"></div>
     <div class="login-success" id="loginSuccess">ログインしました！</div>
@@ -435,7 +429,7 @@ function renderPanel(panelId, data) {
     panel.innerHTML = `
       <div class="need-login">
         <h3>🔑 ログインが必要です</h3>
-        <p>右上の「ログイン」ボタンから<br>jbsbibleapp.com のアカウントでログインしてください</p>
+        <p>右上の「ログイン」ボタンから<br>ウェブバイブルのアカウントでログインしてください</p>
         <button onclick="openLogin()">ログインする</button>
       </div>`;
     return;
@@ -906,14 +900,13 @@ function updateStatusBar(data) {
 
 // ── ログイン ──
 function openLogin() {
-  document.getElementById('loginTitle').textContent = '🔑 聖書協会共同訳 ログイン';
+  document.getElementById('loginTitle').textContent = '🔑 ウェブバイブルにログイン';
   document.getElementById('loginError').style.display = 'none';
   document.getElementById('loginSuccess').style.display = 'none';
   // 前回のメールアドレスを事前入力（パスワードはブラウザのパスワード管理に任せる）
   const email = loadEmail();
   document.getElementById('loginEmail').value = email;
   document.getElementById('loginPassword').value = '';
-  document.getElementById('rememberMe').checked = true;
   document.getElementById('overlay').classList.add('open');
   setTimeout(() => {
     document.getElementById(email ? 'loginPassword' : 'loginEmail').focus();
@@ -926,7 +919,6 @@ function openChangeLogin() {
   document.getElementById('loginSuccess').style.display = 'none';
   document.getElementById('loginEmail').value = loadEmail();
   document.getElementById('loginPassword').value = '';
-  document.getElementById('rememberMe').checked = true;
   document.getElementById('overlay').classList.add('open');
   setTimeout(() => document.getElementById('loginPassword').focus(), 100);
 }
@@ -942,7 +934,6 @@ function closeBgClick(e) {
 async function doLogin() {
   const email    = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
-  const remember = document.getElementById('rememberMe').checked;
   const errDiv   = document.getElementById('loginError');
   const okDiv    = document.getElementById('loginSuccess');
   const btn      = document.getElementById('btnDoLogin');
@@ -961,8 +952,7 @@ async function doLogin() {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // remember: 「次回から自動ログイン」→ この端末のログインを90日保つ（オフならブラウザを閉じるまで）
-      body: JSON.stringify({ email, password, remember })
+      body: JSON.stringify({ email, password })
     });
     const data = await res.json();
     if (data.ok) {

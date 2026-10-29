@@ -412,7 +412,6 @@ def api_login():
         return jsonify({'ok': False, 'message': f'接続エラー: {e}'})
 
     if ok:
-        session.permanent = bool(data.get('remember', True))
         return jsonify({'ok': True})
     return jsonify({'ok': False, 'message': str(result)})
 
